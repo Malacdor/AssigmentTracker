@@ -1,3 +1,79 @@
+# Classes/Subjects Feature Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add create/rename/delete class management with a sidebar for navigation and per-class assignment lists.
+
+**Architecture:** A new `Subject.java` data class owns each class's name and its `DefaultTableModel`. `Main.java`'s `createAndShowGUI` is rewritten to add a dark sidebar (`JPanel`, WEST) containing a `JList<Subject>` and three management buttons. A `ListSelectionListener` swaps the center table's model on selection change. All event handlers derive current state from `subjectList.getSelectedValue()` — no reassignable captured locals.
+
+**Tech Stack:** Java Swing, Apache Ant, JDK 25 (CI), Java 1.8 syntax
+
+---
+
+### Task 1: Create Subject.java
+
+**Files:**
+- Create: `src/Subject.java`
+
+- [ ] **Step 1: Create `src/Subject.java`**
+
+```java
+import javax.swing.table.DefaultTableModel;
+
+/**
+ * Represents a class or subject that holds a list of assignments.
+ */
+public class Subject {
+    private String name;
+    private final DefaultTableModel tableModel;
+
+    public Subject(String name) {
+        this.name = name;
+        this.tableModel = new DefaultTableModel(
+                new String[]{"Assignment", "Due Date", "Done"}, 0) {
+            @Override
+            public Class<?> getColumnClass(int col) {
+                return col == 2 ? Boolean.class : String.class;
+            }
+        };
+    }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public DefaultTableModel getTableModel() { return tableModel; }
+
+    @Override
+    public String toString() { return name; }
+}
+```
+
+- [ ] **Step 2: Verify compilation**
+
+```bash
+ant compile
+```
+
+Expected: `BUILD SUCCESSFUL` with no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/Subject.java
+git commit -m "feat: add Subject data class (#15)"
+```
+
+---
+
+### Task 2: Rewrite Main.java
+
+**Files:**
+- Modify: `src/Main.java`
+
+All UI state is declared up front as effectively-final locals so lambdas can capture them freely. Every action listener reads the current subject from `subjectList.getSelectedValue()` rather than a reassigned field.
+
+- [ ] **Step 1: Replace `src/Main.java` with the following**
+
+```java
 import javax.swing.*;
 import javax.swing.event.*;
 import javax.swing.table.DefaultTableModel;
@@ -32,7 +108,7 @@ public class Main {
                 new String[]{"Assignment", "Due Date", "Done"}, 0) {
             @Override
             public Class<?> getColumnClass(int col) {
-                return col == 2 ? Boolean.class : String.class; // col 2 = "Done" checkbox
+                return col == 2 ? Boolean.class : String.class;
             }
         };
 
@@ -94,19 +170,17 @@ public class Main {
         subjectList.addListSelectionListener(e -> {
             if (e.getValueIsAdjusting()) return;
             Subject selected = subjectList.getSelectedValue();
-            boolean subjectSelected = selected != null;
-            table.setModel(subjectSelected ? selected.getTableModel() : emptyTableModel);
-            nameField.setEnabled(subjectSelected);
-            dateField.setEnabled(subjectSelected);
-            addButton.setEnabled(subjectSelected);
-            removeButton.setEnabled(subjectSelected);
-            renameButton.setEnabled(subjectSelected);
-            deleteButton.setEnabled(subjectSelected);
+            boolean has = selected != null;
+            table.setModel(has ? selected.getTableModel() : emptyTableModel);
+            nameField.setEnabled(has);
+            dateField.setEnabled(has);
+            addButton.setEnabled(has);
+            removeButton.setEnabled(has);
+            renameButton.setEnabled(has);
+            deleteButton.setEnabled(has);
         });
 
-        // --- Assignment actions ---
-        // Each listener calls getSelectedValue() at the moment it fires, rather than
-        // capturing the selection up front. This ensures the selection is always current.
+        // --- Add assignment ---
         addButton.addActionListener(e -> {
             Subject selected = subjectList.getSelectedValue();
             if (selected == null) return;
@@ -192,9 +266,8 @@ public class Main {
             if (!subjectListModel.isEmpty()) {
                 subjectList.setSelectedIndex(Math.max(0, index - 1));
             }
-            // When the list is empty, removing the last element clears the JList
-            // selection automatically, which fires the ListSelectionListener above.
-            // That listener resets the table and disables all controls.
+            // If list is now empty, the ListSelectionListener fires with null selection,
+            // resetting the table to emptyTableModel and disabling controls.
         });
 
         // --- Assemble frame ---
@@ -205,3 +278,73 @@ public class Main {
         frame.setVisible(true);
     }
 }
+```
+
+- [ ] **Step 2: Verify compilation**
+
+```bash
+ant compile
+```
+
+Expected: `BUILD SUCCESSFUL` with no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/Main.java
+git commit -m "feat: add class/subject sidebar and management (#15)"
+```
+
+---
+
+### Task 3: Manual Smoke Test
+
+**Files:** none (verification only)
+
+- [ ] **Step 1: Launch the app**
+
+```bash
+ant run
+```
+
+Expected: app opens at 750×550 with a dark sidebar on the left. Input panel (Assignment / Due Date / Add / Remove Selected) is disabled. Rename and Delete buttons are disabled.
+
+- [ ] **Step 2: Create a class**
+
+Click `New Class`. Enter "Math". Verify:
+- "Math" appears in the sidebar and is highlighted
+- Input panel, Rename, and Delete are all now enabled
+- Table is empty
+
+- [ ] **Step 3: Add an assignment**
+
+With "Math" selected, type "Homework Ch.1" in the Assignment field, "2026-04-10" in Due Date, click `Add`. Verify the row appears in the table and the fields clear.
+
+- [ ] **Step 4: Verify class isolation**
+
+Click `New Class`, enter "Biology". Verify the table is empty (Biology has no assignments). Click "Math" in the sidebar. Verify "Homework Ch.1" is still in the table.
+
+- [ ] **Step 5: Rename a class**
+
+Select "Biology". Click `Rename`. Change the name to "Bio". Click OK. Verify the sidebar now shows "Bio".
+
+- [ ] **Step 6: Reject duplicate names**
+
+Click `New Class`. Enter "math" (lowercase). Verify an error dialog appears: "A class with that name already exists." Verify no duplicate is added to the sidebar.
+
+- [ ] **Step 7: Delete a class**
+
+Select "Bio". Click `Delete`. Verify the confirmation dialog reads: "Delete 'Bio' and all its assignments? This cannot be undone." Click `Yes`. Verify "Bio" is gone and "Math" is auto-selected with its assignment still present.
+
+- [ ] **Step 8: Delete the last class**
+
+With only "Math" remaining, click `Delete` and confirm. Verify: the sidebar is empty, the table shows no rows, and the input panel and Rename/Delete buttons are all disabled.
+
+- [ ] **Step 9: Commit any fixes found during smoke test**
+
+Only run if changes were needed during testing:
+
+```bash
+git add src/Main.java src/Subject.java
+git commit -m "fix: address issues found during smoke test (#15)"
+```
