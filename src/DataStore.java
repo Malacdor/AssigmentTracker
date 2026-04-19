@@ -6,21 +6,16 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Handles saving and loading application data to/from a JSON file.
- */
 class DataStore {
     private static Path DATA_FILE = Paths.get(
             System.getProperty("user.home"), ".assignmenttracker_data.json");
 
     private DataStore() { }
 
-    /** Overrides the data file path. Intended for testing only. */
     static void setDataFile(Path path) {
         DATA_FILE = path;
     }
 
-    /** Saves all subjects and their assignments to disk. */
     static void save(DefaultListModel<Subject> model) {
         StringBuilder sb = new StringBuilder();
         sb.append("[\n");
@@ -31,12 +26,14 @@ class DataStore {
             sb.append("    \"assignments\": [\n");
             DefaultTableModel tm = s.getTableModel();
             for (int r = 0; r < tm.getRowCount(); r++) {
-                String aName = (String) tm.getValueAt(r, 0);
-                String date  = (String) tm.getValueAt(r, 1);
+                String aName = (String)  tm.getValueAt(r, 0);
+                String date  = (String)  tm.getValueAt(r, 1);
                 Boolean done = (Boolean) tm.getValueAt(r, 2);
+                String notes = (String)  tm.getValueAt(r, 3);
                 sb.append("      {\"name\": ").append(jsonString(aName))
                   .append(", \"date\": ").append(jsonString(date))
                   .append(", \"done\": ").append(done != null && done)
+                  .append(", \"notes\": ").append(jsonString(notes))
                   .append("}");
                 if (r < tm.getRowCount() - 1) sb.append(",");
                 sb.append("\n");
@@ -54,7 +51,6 @@ class DataStore {
         }
     }
 
-    /** Loads subjects and assignments from disk into the given model. */
     static void load(DefaultListModel<Subject> model) {
         if (!Files.exists(DATA_FILE)) return;
         try {
@@ -66,15 +62,10 @@ class DataStore {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Minimal hand-rolled JSON parser (no external dependencies)
-    // -----------------------------------------------------------------------
-
     private static List<Subject> parseSubjects(String json) {
         List<Subject> result = new ArrayList<>();
         json = json.trim();
         if (!json.startsWith("[")) return result;
-        // Strip outer array brackets
         json = json.substring(1, json.length() - 1).trim();
         List<String> objects = splitTopLevelObjects(json);
         for (String obj : objects) {
@@ -87,7 +78,8 @@ class DataStore {
                     String aName = extractStringField(row, "name");
                     String date  = extractStringField(row, "date");
                     boolean done = extractBoolField(row, "done");
-                    s.getTableModel().addRow(new Object[]{aName, date, done});
+                    String notes = extractStringField(row, "notes");
+                    s.getTableModel().addRow(new Object[]{aName, date, done, notes});
                 }
             }
             result.add(s);
@@ -95,7 +87,6 @@ class DataStore {
         return result;
     }
 
-    /** Splits a JSON array body into individual {...} object strings. */
     private static List<String> splitTopLevelObjects(String body) {
         List<String> parts = new ArrayList<>();
         int depth = 0;
@@ -123,7 +114,7 @@ class DataStore {
         idx += search.length();
         while (idx < obj.length() && (obj.charAt(idx) == ' ' || obj.charAt(idx) == ':')) idx++;
         if (idx >= obj.length() || obj.charAt(idx) != '"') return "";
-        idx++; // skip opening quote
+        idx++;
         StringBuilder sb = new StringBuilder();
         while (idx < obj.length()) {
             char c = obj.charAt(idx);
@@ -131,7 +122,7 @@ class DataStore {
                 idx++;
                 char esc = obj.charAt(idx);
                 switch (esc) {
-                    case '"':  sb.append('"'); break;
+                    case '"':  sb.append('"');  break;
                     case '\\': sb.append('\\'); break;
                     case 'n':  sb.append('\n'); break;
                     case 'r':  sb.append('\r'); break;
@@ -184,9 +175,9 @@ class DataStore {
             switch (c) {
                 case '"':  sb.append("\\\""); break;
                 case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
+                case '\n': sb.append("\\n");  break;
+                case '\r': sb.append("\\r");  break;
+                case '\t': sb.append("\\t");  break;
                 default:   sb.append(c);
             }
         }
