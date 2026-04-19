@@ -4,6 +4,7 @@ import com.formdev.flatlaf.FlatLightLaf;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -14,7 +15,7 @@ import java.time.format.DateTimeFormatter;
  * Main class with main method invoked on app start.
  * @version 1.0.4
  * @author Dr. Jody Paul
- * @author Ayslynn Wardall, Kenneth Pyron, Amadou Seck
+ * @author Ayslynn Wardall, Kenneth Pyron, Amadou Seck, Diego Salas
  */
 public class Main {
     /** Private constructor to prevent instantiation of entry point class. */
@@ -114,13 +115,65 @@ public class Main {
         JTable table = new JTable(emptyTableModel);
         table.setRowHeight(24);
 
-        // Hide the Notes column — notes are shown in NotesPanel below the table instead.
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(emptyTableModel);
+        table.setRowSorter(sorter);
+
         table.getColumnModel().getColumn(3).setMinWidth(0);
         table.getColumnModel().getColumn(3).setMaxWidth(0);
         table.getColumnModel().getColumn(3).setWidth(0);
 
-        // Notes panel sits below the assignment table.
         NotesPanel notesPanel = new NotesPanel(subjectListModel, table);
+
+        JTextField filterField = new JTextField(18);
+        filterField.setToolTipText("Search by assignment name or notes content");
+        String[] filterOptions = {"All", "Has Notes", "No Notes", "Done", "Not Done"};
+        JComboBox<String> filterCombo = new JComboBox<>(filterOptions);
+        JButton clearFilterButton = new JButton("Clear");
+
+        JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        filterBar.add(new JLabel("Filter:"));
+        filterBar.add(filterField);
+        filterBar.add(filterCombo);
+        filterBar.add(clearFilterButton);
+
+        Runnable applyFilter = () -> {
+            String text = filterField.getText().trim().toLowerCase();
+            String mode = (String) filterCombo.getSelectedItem();
+            RowFilter<DefaultTableModel, Integer> filter = new RowFilter<DefaultTableModel, Integer>() {
+                @Override
+                public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                    String name  = entry.getStringValue(0).toLowerCase();
+                    String notes = entry.getStringValue(3).toLowerCase();
+                    boolean done = Boolean.TRUE.equals(entry.getValue(2));
+                    boolean textMatch = text.isEmpty() || name.contains(text) || notes.contains(text);
+                    boolean modeMatch;
+                    if ("Has Notes".equals(mode)) {
+                        modeMatch = !notes.trim().isEmpty();
+                    } else if ("No Notes".equals(mode)) {
+                        modeMatch = notes.trim().isEmpty();
+                    } else if ("Done".equals(mode)) {
+                        modeMatch = done;
+                    } else if ("Not Done".equals(mode)) {
+                        modeMatch = !done;
+                    } else {
+                        modeMatch = true;
+                    }
+                    return textMatch && modeMatch;
+                }
+            };
+            sorter.setRowFilter(filter);
+        };
+
+        filterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilter.run(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilter.run(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter.run(); }
+        });
+        filterCombo.addActionListener(e -> applyFilter.run());
+        clearFilterButton.addActionListener(e -> {
+            filterField.setText("");
+            filterCombo.setSelectedIndex(0);
+        });
 
         // --- South: input panel (disabled until a class is selected) ---
         DateTimeFormatter displayFmt = DateTimeFormatter.ofPattern("MM/dd/yyyy");
@@ -232,9 +285,12 @@ public class Main {
             if (e.getValueIsAdjusting()) return;
             Subject selected = subjectList.getSelectedValue();
             boolean subjectSelected = selected != null;
-            table.setModel(subjectSelected ? selected.getTableModel() : emptyTableModel);
+            DefaultTableModel activeModel = subjectSelected ? selected.getTableModel() : emptyTableModel;
+            table.setModel(activeModel);
+            sorter.setModel(activeModel);
+            table.setRowSorter(sorter);
+            applyFilter.run();
 
-            // Keep Notes column hidden whenever the model is swapped.
             table.getColumnModel().getColumn(3).setMinWidth(0);
             table.getColumnModel().getColumn(3).setMaxWidth(0);
             table.getColumnModel().getColumn(3).setWidth(0);
@@ -263,7 +319,8 @@ public class Main {
                 dateField.setText("");
                 pickedDate[0] = null;
                 nameField.requestFocus();
-                calendarPanel.refresh(); // keep due-date markers in sync
+                calendarPanel.refresh();
+                applyFilter.run();
             }
         });
 
@@ -274,7 +331,8 @@ public class Main {
             int row = table.getSelectedRow();
             if (row >= 0) {
                 selected.getTableModel().removeRow(row);
-                calendarPanel.refresh(); // keep due-date markers in sync
+                calendarPanel.refresh();
+                applyFilter.run();
             }
         });
 
@@ -347,9 +405,13 @@ public class Main {
             // That listener resets the table and disables all controls.
         });
 
-        // Split the Assignments tab vertically: table on top, notes editor below.
         JScrollPane tableScroll = new JScrollPane(table);
-        JSplitPane assignmentSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableScroll, notesPanel);
+
+        JPanel tablePanel = new JPanel(new BorderLayout());
+        tablePanel.add(filterBar, BorderLayout.NORTH);
+        tablePanel.add(tableScroll, BorderLayout.CENTER);
+
+        JSplitPane assignmentSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tablePanel, notesPanel);
         assignmentSplit.setResizeWeight(0.75);
         assignmentSplit.setBorder(null);
 
